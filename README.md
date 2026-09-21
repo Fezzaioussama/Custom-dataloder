@@ -1,85 +1,80 @@
-# Solution of Test technique "Creation DataLoder" 
-In this solution there are three Script each one for specific work
+# Custom DataLoader
 
-1. PropreDataloder.py: Create Propre Dataloder for training classifier
+> Technical-test solution: a custom PyTorch `Dataset`/`DataLoader` for an image classification set labelled from a spreadsheet, plus label inspection and data augmentation scripts.
 
-2. Display_Img_Lab.py: dsipaly image with its propre label 
+The dataset is an *éco-compteur* collection — street images of bikes,
+pedestrians, and scooters — where labels live in an Excel file rather than in
+the directory structure. That rules out `ImageFolder` and makes a custom
+`Dataset` the right answer.
 
-3. Techniques_data_augmenetation.py: Display Images using technique for data augementation use it for showing theirs works
+## The scripts
 
+| Script | Purpose |
+|---|---|
+| [`PropreDataloder.py`](PropreDataloder.py) | The `PropreDataset` class — reads the annotation spreadsheet, loads images, applies random padding, returns `(image, label)` tensors ready for a `DataLoader` |
+| [`Display_Img_Lab.py`](Display_Img_Lab.py) | Sanity check — picks a random row, displays the image with its decoded class name |
+| [`Techniques_data_augmentation.py`](Techniques_data_augmentation.py) | Side-by-side visualisation of augmentation transforms: manual padding, random rotation, flips |
 
-# PropreDataloder.py
+`Dataset_housing_price.zip` is an unrelated dataset kept here for reuse — it's
+the download source for the ingestion stage of
+[Project-Mlops](https://github.com/Fezzaioussama/Project-Mlops).
 
-This is a Python code snippet that defines a custom PyTorch dataset class named `PropreDataset` for classification images in classes idicate type of bicycle. The dataset is intended for training a neural network using PyTorch's DataLoader. The dataset is loaded from an Excel file containing image information and labels. Various image transformations and augmentations are applied to the dataset.
+## Classes
 
-## Requirements
-- pandas
-- numpy
-- torch
-- torchvision
-- Pillow (PIL)
+Labels are seven columns in the spreadsheet, decoded via `argmax`:
 
-## Usage
-1. Install the required dependencies:
+`m-loc` · `e-loc` · `meca` · `elec` · `nn_id` · `trot-loc` · `trot`
 
-    ```bash
-    pip install pandas numpy torch torchvision Pillow
-    ```
+(rental and private mechanical/electric bikes, unidentified, rental and private
+scooters).
 
-2. Save your dataset annotations in an Excel file, and set the path to the file in the `file_path` variable.
+## `PropreDataset`
 
-3. Set the `root_dir` variable to the path of the folder containing the dataset images.
+The class implements the standard three methods:
 
-4. Adjust the batch size (`batch_size`) according to your system's memory.
+- `__len__` — row count of the dataframe.
+- `__getitem__(idx)` — resolves the image filename from column 1, loads it from
+  `root_dir`, applies random padding then any configured transform, and returns
+  the image with its label tensor.
+- `random_padding(image, max_padding)` — pads by a random amount in
+  `[0, max_padding]` with black borders, so the subject sits at a varying offset
+  each epoch.
 
-5. Run the script.
+Random padding is the interesting choice here: it's augmentation that shifts the
+subject's position within the frame without cropping anything out, which suits a
+counter dataset where objects appear at varying distances from the camera.
 
-## Notes
+## Running
 
-1. Make sure to customize the file paths according to your dataset location.
-2. Adjust the transformation parameters based on your specific task and dataset characteristics.
+```bash
+pip install torch torchvision pandas numpy matplotlib pillow openpyxl
+python Display_Img_Lab.py
+```
 
-# Display_Img_Lab.py
+> **Paths are hardcoded** to a Windows drive
+> (`D:\Python_code\datasetecocompteur`), with one Colab Drive path left in
+> `Techniques_data_augmentation.py`. Point `file_path` and `root_dir` at your
+> own copy before running anything. The dataset itself is not in this repo.
 
-This Python script randomly selects an image from a dataset described in an Excel file and displays the image along with its label. The script utilizes the `Pandas` library for handling Excel data, the `PIL` (Pillow) library for image manipulation, and `matplotlib` for visualizing the image.
+## Usage sketch
 
-## Requirements
-- pandas
-- Pillow (PIL)
-- torch
-- matplotlib
-- numpy
+```python
+import pandas as pd
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from PropreDataloder import PropreDataset
 
-## Usage
-1. Install the required dependencies:
+df = pd.read_excel("annotations.xlsx")
+dataset = PropreDataset(
+    dataframe=df,
+    root_dir="path/to/images",
+    ttransform=transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+    ]),
+    max_padding=20,
+)
+loader = DataLoader(dataset, batch_size=32, shuffle=True)
+```
 
-    ```bash
-    pip install pandas Pillow torch matplotlib numpy
-    ```
-
-2. Set the `file_path` variable to the path of your dataset annotations Excel file.
-
-3. Set the `root_dir` variable to the path of the folder containing the dataset images.
-
-4. Run the script.
-
-## Notes
-
-1. Customize the file_path and root_dir variables based on your dataset location.
-
-2. This script randomly selects an image and predicts its label. Adjustments can be made to loop through multiple images or perform more complex operations based on your requirements.
-
-# Techniques_data_augmenetation.py
-
-This Python script demonstrates techniques for data augmentation : manual padding and random transformations from library Pytorch. The script uses the `PIL` (Pillow) library for image manipulation, `numpy` for array operations, `random` for randomization, `transforms` from `torchvision` for data augmentation, and `matplotlib.pyplot` for visualization.
-in this case i use technique for Data augmentation:
-1. Random Rotation
-2. Random Horizontal Flip
-3. Random Vertical Flip
-4. Introduces random color variations to the image.
-
-## Notes
-
-1. Adjust the paths to your images accordingly.
-2. Customize the transformation parameters based on your specific task and dataset characteristics.
-3. The manual padding function adds black borders to the image, which may be useful in certain scenarios.
+Note the constructor argument is `ttransform`, not `transform`.
